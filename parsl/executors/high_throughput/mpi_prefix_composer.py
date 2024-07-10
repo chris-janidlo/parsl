@@ -8,6 +8,16 @@ VALID_LAUNCHERS = ('srun',
                    'mpiexec')
 
 
+class UnsupportedResourceSpecification(Exception):
+    """Exception raised when a resource specfication is supplied when it shouldn't be"""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+
+    def __str__(self):
+        return f"Unsupported resource specification: {self.reason}"
+
+
 class MissingResourceSpecification(Exception):
     """Exception raised when input is  not supplied a resource specification"""
 
@@ -36,9 +46,14 @@ def validate_resource_spec(resource_spec: Dict[str, str], is_mpi_enabled: bool):
     """
     user_keys = set(resource_spec.keys())
 
+    if not is_mpi_enabled:
+        if len(user_keys) > 0:
+            raise UnsupportedResourceSpecification("Resource specification is not supported in non-MPI contexts")
+        return
+
     # empty resource_spec when mpi_mode is set causes parsl to hang
     # ref issue #3427
-    if is_mpi_enabled and len(user_keys) == 0:
+    if len(user_keys) == 0:
         raise MissingResourceSpecification('MPI mode requires optional parsl_resource_specification keyword argument to be configured')
 
     legal_keys = set(("ranks_per_node",
