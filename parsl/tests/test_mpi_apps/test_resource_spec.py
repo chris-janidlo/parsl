@@ -12,6 +12,7 @@ from parsl.app.app import python_app
 from parsl.executors.high_throughput.mpi_prefix_composer import (
     InvalidResourceSpecification,
     MissingResourceSpecification,
+    UnsupportedResourceSpecification,
     validate_resource_spec,
 )
 from parsl.executors.high_throughput.mpi_resource_management import (
@@ -124,9 +125,9 @@ def test_top_level():
 @pytest.mark.parametrize(
     "resource_spec, is_mpi_enabled, exception",
     (
-        ({"num_nodes": 2, "ranks_per_node": 1}, False, None),
-        ({"launcher_options": "--debug_foo"}, False, None),
-        ({"num_nodes": 2, "BAD_OPT": 1}, False, InvalidResourceSpecification),
+        ({"num_nodes": 2, "ranks_per_node": 1}, False, UnsupportedResourceSpecification),
+        ({"launcher_options": "--debug_foo"}, False, UnsupportedResourceSpecification),
+        ({"num_nodes": 2, "BAD_OPT": 1}, False, UnsupportedResourceSpecification),
         ({}, False, None),
         ({"num_nodes": 2, "ranks_per_node": 1}, True, None),
         ({"launcher_options": "--debug_foo"}, True, None),
