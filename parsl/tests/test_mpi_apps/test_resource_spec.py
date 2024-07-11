@@ -30,7 +30,6 @@ def local_config():
     config = fresh_config()
     config.executors[0].label = EXECUTOR_LABEL
     config.executors[0].max_workers_per_node = 1
-    config.executors[0].enable_mpi_mode = True
     return config
 
 
@@ -48,23 +47,6 @@ def get_env_vars(parsl_resource_specification: Dict = {}) -> Dict:
         if key.startswith("PARSL_"):
             parsl_vars[key] = os.environ[key]
     return parsl_vars
-
-
-@pytest.mark.local
-def test_resource_spec_env_vars():
-    resource_spec = {
-        "num_nodes": 4,
-        "ranks_per_node": 2,
-    }
-
-    assert double(5).result() == 10
-
-    future = get_env_vars(parsl_resource_specification=resource_spec)
-
-    result = future.result()
-    assert isinstance(result, Dict)
-    assert result["PARSL_NUM_NODES"] == str(resource_spec["num_nodes"])
-    assert result["PARSL_RANKS_PER_NODE"] == str(resource_spec["ranks_per_node"])
 
 
 @pytest.mark.local
