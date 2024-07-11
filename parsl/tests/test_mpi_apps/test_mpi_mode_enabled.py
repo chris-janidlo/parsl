@@ -47,8 +47,7 @@ def get_env_vars(parsl_resource_specification: Dict = {}) -> Dict:
 
 @pytest.mark.local
 def test_only_resource_specs_set():
-    """Confirm that resource_spec env vars are set while launch prefixes are not
-    when enable_mpi_mode = False"""
+    """Confirm that resource_spec env vars and launch prefixes are set"""
     resource_spec = {
         "num_nodes": 2,
         "ranks_per_node": 2,
