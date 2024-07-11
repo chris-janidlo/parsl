@@ -12,6 +12,7 @@ from parsl.app.app import python_app
 from parsl.executors.high_throughput.mpi_prefix_composer import (
     InvalidResourceSpecification,
     MissingResourceSpecification,
+    UnsupportedResourceSpecification,
     validate_resource_spec,
 )
 from parsl.executors.high_throughput.mpi_resource_management import (
@@ -46,23 +47,6 @@ def get_env_vars(parsl_resource_specification: Dict = {}) -> Dict:
         if key.startswith("PARSL_"):
             parsl_vars[key] = os.environ[key]
     return parsl_vars
-
-
-@pytest.mark.local
-def test_resource_spec_env_vars():
-    resource_spec = {
-        "num_nodes": 4,
-        "ranks_per_node": 2,
-    }
-
-    assert double(5).result() == 10
-
-    future = get_env_vars(parsl_resource_specification=resource_spec)
-
-    result = future.result()
-    assert isinstance(result, Dict)
-    assert result["PARSL_NUM_NODES"] == str(resource_spec["num_nodes"])
-    assert result["PARSL_RANKS_PER_NODE"] == str(resource_spec["ranks_per_node"])
 
 
 @pytest.mark.local
@@ -124,9 +108,9 @@ def test_top_level():
 @pytest.mark.parametrize(
     "resource_spec, is_mpi_enabled, exception",
     (
-        ({"num_nodes": 2, "ranks_per_node": 1}, False, None),
-        ({"launcher_options": "--debug_foo"}, False, None),
-        ({"num_nodes": 2, "BAD_OPT": 1}, False, InvalidResourceSpecification),
+        ({"num_nodes": 2, "ranks_per_node": 1}, False, UnsupportedResourceSpecification),
+        ({"launcher_options": "--debug_foo"}, False, UnsupportedResourceSpecification),
+        ({"num_nodes": 2, "BAD_OPT": 1}, False, UnsupportedResourceSpecification),
         ({}, False, None),
         ({"num_nodes": 2, "ranks_per_node": 1}, True, None),
         ({"launcher_options": "--debug_foo"}, True, None),

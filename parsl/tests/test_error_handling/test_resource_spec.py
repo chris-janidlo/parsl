@@ -5,6 +5,7 @@ from parsl.executors.errors import ExecutorError, UnsupportedFeatureError
 from parsl.executors.high_throughput.executor import HighThroughputExecutor
 from parsl.executors.high_throughput.mpi_prefix_composer import (
     InvalidResourceSpecification,
+    UnsupportedResourceSpecification,
 )
 
 
@@ -27,7 +28,9 @@ def test_resource(n=2):
     try:
         fut.result()
     except InvalidResourceSpecification:
-        assert isinstance(executor, HighThroughputExecutor)
+        assert isinstance(executor, HighThroughputExecutor) and executor.enable_mpi_mode
+    except UnsupportedResourceSpecification:
+        assert isinstance(executor, HighThroughputExecutor) and not executor.enable_mpi_mode
     except UnsupportedFeatureError:
         assert not isinstance(executor, WorkQueueExecutor)
     except Exception as e:
@@ -40,7 +43,9 @@ def test_resource(n=2):
     try:
         fut.result()
     except InvalidResourceSpecification:
-        assert isinstance(executor, HighThroughputExecutor)
+        assert isinstance(executor, HighThroughputExecutor) and executor.enable_mpi_mode
+    except UnsupportedResourceSpecification:
+        assert isinstance(executor, HighThroughputExecutor) and not executor.enable_mpi_mode
     except UnsupportedFeatureError:
         assert not isinstance(executor, WorkQueueExecutor)
     except Exception as e:

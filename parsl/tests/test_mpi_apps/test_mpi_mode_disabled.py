@@ -4,6 +4,9 @@ import pytest
 
 import parsl
 from parsl import python_app
+from parsl.executors.high_throughput.mpi_prefix_composer import (
+    UnsupportedResourceSpecification,
+)
 from parsl.tests.configs.htex_local import fresh_config
 
 EXECUTOR_LABEL = "MPI_TEST"
@@ -18,30 +21,18 @@ def local_config():
 
 
 @python_app
-def get_env_vars(parsl_resource_specification: Dict = {}) -> Dict:
-    import os
-
-    parsl_vars = {}
-    for key in os.environ:
-        if key.startswith("PARSL_"):
-            parsl_vars[key] = os.environ[key]
-    return parsl_vars
+def hello_world(parsl_resource_specification: Dict = {}) -> str:
+    return "hello world"
 
 
 @pytest.mark.local
 def test_only_resource_specs_set():
-    """Confirm that resource_spec env vars are set while launch prefixes are not
-    when enable_mpi_mode = False"""
+    """Confirm that resource_spec env vars result in an error when
+    enable_mpi_mode == False"""
     resource_spec = {
         "num_nodes": 4,
         "ranks_per_node": 2,
     }
 
-    future = get_env_vars(parsl_resource_specification=resource_spec)
-
-    result = future.result()
-    assert isinstance(result, Dict)
-    assert "PARSL_DEFAULT_PREFIX" not in result
-    assert "PARSL_SRUN_PREFIX" not in result
-    assert result["PARSL_NUM_NODES"] == str(resource_spec["num_nodes"])
-    assert result["PARSL_RANKS_PER_NODE"] == str(resource_spec["ranks_per_node"])
+    with pytest.raises(UnsupportedResourceSpecification):
+        hello_world(parsl_resource_specification=resource_spec).result()
