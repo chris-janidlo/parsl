@@ -30,6 +30,7 @@ def local_config():
     config = fresh_config()
     config.executors[0].label = EXECUTOR_LABEL
     config.executors[0].max_workers_per_node = 1
+    config.executors[0].enable_mpi_mode = True
     return config
 
 
