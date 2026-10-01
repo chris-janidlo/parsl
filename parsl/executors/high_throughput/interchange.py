@@ -29,7 +29,7 @@ from parsl.serialize import serialize as serialize_object
 from parsl.version import VERSION as PARSL_VERSION
 
 PKL_HEARTBEAT_CODE = pickle.dumps((2 ** 32) - 1)
-PKL_DRAINED_CODE = pickle.dumps((2 ** 32) - 2)
+PKL_DRAIN_ACK_CODE = pickle.dumps((2 ** 32) - 2)
 
 logger = logging.getLogger("parsl.executors.high_throughput.interchange")
 
@@ -319,7 +319,6 @@ class Interchange:
             self.process_task_incoming()
             self.process_manager_socket_message(interesting_managers, monitoring_radio, kill_event)
             self.expire_bad_managers(interesting_managers, monitoring_radio)
-            self.expire_drained_managers(interesting_managers, monitoring_radio)
             self.log_manager_counts(interesting_managers)
             self.process_tasks_to_send(interesting_managers, monitoring_radio)
 
@@ -510,26 +509,20 @@ class Interchange:
 
         elif mtype == 'drain':
             m['draining'] = True
+            self.manager_sock.send_multipart([manager_id, PKL_DRAIN_ACK_CODE])
+
+        elif mtype == 'drained':
+            logger.info(f"Manager {manager_id!r} has drained - removing manager")
+            self._ready_managers.pop(manager_id)
+            interesting_managers.discard(manager_id)
+
+            m['active'] = False
+            self._send_monitoring_info(monitoring_radio, m)
 
         else:
             logger.error(f"Unexpected message type received from manager: {mtype}")
 
         logger.debug("leaving worker message section")
-
-    def expire_drained_managers(self, interesting_managers: Set[bytes], monitoring_radio: Optional[MonitoringRadioSender]) -> None:
-
-        for manager_id in list(interesting_managers):
-            # is it always true that a draining manager will be in interesting managers?
-            # i think so because it will have outstanding capacity?
-            m = self._ready_managers[manager_id]
-            if m['draining'] and len(m['tasks']) == 0:
-                logger.info(f"Manager {manager_id!r} is drained - sending drained message to manager")
-                self.manager_sock.send_multipart([manager_id, PKL_DRAINED_CODE])
-                interesting_managers.remove(manager_id)
-                self._ready_managers.pop(manager_id)
-
-                m['active'] = False
-                self._send_monitoring_info(monitoring_radio, m)
 
     def log_manager_counts(self, interesting_managers: Set[bytes]) -> None:
         count_interesting = len(interesting_managers)

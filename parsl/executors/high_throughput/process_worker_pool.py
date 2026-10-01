@@ -46,7 +46,7 @@ from parsl.serialize import serialize
 from parsl.version import VERSION as PARSL_VERSION
 
 HEARTBEAT_CODE = (2 ** 32) - 1
-DRAINED_CODE = (2 ** 32) - 2
+DRAIN_ACK_CODE = (2 ** 32) - 2
 
 # this is specified explicitly because when this file is run as a script (the
 # expected use), __name__ which is the normal idiom here is set to __main__,
@@ -289,7 +289,7 @@ class Manager:
 
     @staticmethod
     def drain_to_incoming(task_incoming: zmq.Socket) -> None:
-        """ Send heartbeat to the incoming task queue
+        """ Ask the interchange to stop sending tasks to this manager
         """
         msg = {'type': 'drain'}
         b_msg = pickle.dumps(msg)
@@ -332,9 +332,12 @@ class Manager:
         msg = self.create_reg_message()
         logger.debug("Sending registration message: %s", msg)
         ix_sock.send(pickle.dumps(msg))
+
         last_beat = time.time()
         last_interchange_contact = time.time()
-        task_recv_counter = 0
+        lifetime_tasks = 0
+        outstanding_tasks: set[int] = set()
+        drain_acked = False
 
         while not self._stop_event.is_set():
 
@@ -367,9 +370,9 @@ class Manager:
             if time.time() > self.drain_time:
                 logger.info("Requesting drain")
                 self.drain_to_incoming(ix_sock)
-                # This will start the pool draining...
-                # Drained exit behaviour does not happen here. It will be
-                # driven by the interchange sending a DRAINED_CODE message.
+                # Let the interchange know we're draining so it can stop sending
+                # tasks. We'll wait for it to acknowledge the drain so that we can
+                # run any tasks it may have sent before it knew we were draining.
 
                 # now set drain time to the far future so we don't send a drain
                 # message every iteration.
@@ -387,21 +390,27 @@ class Manager:
 
                 if tasks == HEARTBEAT_CODE:
                     logger.debug("Got heartbeat response from interchange")
-                elif tasks == DRAINED_CODE:
-                    logger.info("Got fully drained message from interchange - setting kill flag")
-                    self._stop_event.set()
+                elif tasks == DRAIN_ACK_CODE:
+                    logger.info("Interchange acknowledged drain - will set kill flag when all tasks are done")
+                    drain_acked = True
                 else:
-                    task_recv_counter += len(tasks)
+                    lifetime_tasks += len(tasks)
+                    outstanding_tasks.update(t['task_id'] for t in tasks)
                     logger.debug("Got executor tasks: {}, cumulative count of tasks: {}".format(
-                        [t['task_id'] for t in tasks], task_recv_counter
+                        [t['task_id'] for t in tasks], lifetime_tasks
                     ))
 
                     for task in tasks:
                         self.task_scheduler.put_task(task)
 
             elif socks.get(results_sock) == zmq.POLLIN:
+                r = results_sock.recv()
                 meta_b = pickle.dumps({'type': 'result'})
-                ix_sock.send_multipart([meta_b, results_sock.recv()])
+                ix_sock.send_multipart([meta_b, r])
+                msg = pickle.loads(r)
+                if msg['type'] == 'result':
+                    # this can also be a monitoring message; only count actual results
+                    outstanding_tasks.discard(msg['task_id'])
                 logger.debug("Result sent to interchange")
 
             else:
@@ -413,6 +422,14 @@ class Manager:
                     self._stop_event.set()
                     logger.critical("Exiting")
                     break
+
+            if drain_acked and not outstanding_tasks:
+                logger.info("Fully drained - notifying interchange and setting kill flag")
+                # Let this (and any final results still queued) reach the
+                # interchange rather than being discarded on close
+                ix_sock.setsockopt(zmq.LINGER, 1000)
+                ix_sock.send(pickle.dumps({'type': 'drained'}))
+                self._stop_event.set()
 
         ix_sock.close()
         logger.info("Exiting")
