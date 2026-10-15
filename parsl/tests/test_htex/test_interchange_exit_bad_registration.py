@@ -11,15 +11,23 @@ import pytest
 import zmq
 
 import parsl.executors.high_throughput.zmq_pipes as zmq_pipes
+from parsl.executors.high_throughput.errors import VersionMismatch
 from parsl.executors.high_throughput.executor import DEFAULT_INTERCHANGE_LAUNCH_CMD
 from parsl.executors.high_throughput.manager_selector import RandomManagerSelector
+from parsl.serialize import deserialize
 from parsl.version import VERSION as PARSL_VERSION
 
 P_ms = 10
 
 
 @pytest.mark.local
-def test_exit_with_bad_registration(tmpd_cwd, try_assert):
+@pytest.mark.parametrize(
+    "parsl_key,python_key", [
+        ("parsl_version", "python_version"),
+        ("parsl_v", "python_v"),  # sent by older worker pool managers
+    ]
+)
+def test_exit_with_bad_registration(tmpd_cwd, try_assert, parsl_key, python_key):
     """Test that the interchange exits when it receives a bad registration message.
     This complements parsl/tests/test_scaling/test_worker_interchange_bad_messages_3262.py
     which tests that the interchange is resistent to other forms of bad message.
@@ -81,8 +89,8 @@ def test_exit_with_bad_registration(tmpd_cwd, try_assert):
     # to shut down.
 
     msg = {'type': 'registration',
-           'parsl_v': PARSL_VERSION,
-           'python_v': "1.1.1",  # this is the bad bit
+           parsl_key: PARSL_VERSION,
+           python_key: "1.1.1",  # this is the bad bit
            'worker_count': 1,
            'uid': 'testuid',
            'block_id': 0,
@@ -110,6 +118,11 @@ def test_exit_with_bad_registration(tmpd_cwd, try_assert):
 
     task_channel.send(pickle.dumps(msg))
 
+    result = pickle.loads(incoming_q.get(timeout_ms=5000))
+    assert 'exception' in result, "Interchange should at least return an error"
+    exception = deserialize(result['exception'])
+    assert isinstance(exception, VersionMismatch), "Expect correct error for bad python version"
+
     # check that the interchange exits within some reasonable time
     try_assert(lambda: interchange_proc.poll() is not None, "Interchange did not exit after killing watched client process", timeout_ms=5000)
 
@@ -123,16 +136,16 @@ def test_exit_with_bad_registration(tmpd_cwd, try_assert):
 @pytest.mark.local
 @pytest.mark.parametrize(
     "worker_version_info", [
-        {"parsl_v": PARSL_VERSION,
-         "python_v": "0.0.0",  # python_v mismatch
+        {"parsl_version": PARSL_VERSION,
+         "python_version": "0.0.0",  # python_version mismatch
          },
-        {"parsl_v": "0.0.0",  # parsl_v mismatch
-         "python_v": "{}.{}.{}".format(sys.version_info.major,
-                                       sys.version_info.minor,
-                                       sys.version_info.micro)
+        {"parsl_version": "0.0.0",  # parsl_version mismatch
+         "python_version": "{}.{}.{}".format(sys.version_info.major,
+                                             sys.version_info.minor,
+                                             sys.version_info.micro)
          },
-        {"parsl_v": "0.0.0",  # parsl_v mismatch and
-         "python_v": "0.0.0",  # python_v mismatch
+        {"parsl_version": "0.0.0",  # parsl_version mismatch and
+         "python_version": "0.0.0",  # python_version mismatch
          }]
 )
 def test_ignore_version_check_at_registration(tmpd_cwd, try_assert, worker_version_info):

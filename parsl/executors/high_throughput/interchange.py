@@ -177,10 +177,10 @@ class Interchange:
 
         self.manager_selector = manager_selector
 
-        self.current_platform = {'parsl_v': PARSL_VERSION,
-                                 'python_v': "{}.{}.{}".format(sys.version_info.major,
-                                                               sys.version_info.minor,
-                                                               sys.version_info.micro),
+        self.current_platform = {'parsl_version': PARSL_VERSION,
+                                 'python_version': "{}.{}.{}".format(sys.version_info.major,
+                                                                     sys.version_info.minor,
+                                                                     sys.version_info.micro),
                                  'os': platform.system(),
                                  'hostname': platform.node(),
                                  'dir': os.getcwd()}
@@ -218,6 +218,7 @@ class Interchange:
             d['timestamp'] = datetime.datetime.now()
             d['last_heartbeat'] = datetime.datetime.fromtimestamp(d['last_heartbeat'])
             d['run_id'] = self.run_id
+            d['python_v'] = manager['python_version']  # we use _version, monitoring db uses _v
 
             monitoring_radio.send((MessageType.NODE_INFO, d))
 
@@ -380,10 +381,11 @@ class Interchange:
             return
 
         elif mtype == 'registration':
-            ix_minor_py = self.current_platform['python_v'].rsplit('.', 1)[0]
-            ix_parsl_v = self.current_platform['parsl_v']
-            mgr_minor_py = msg['python_v'].rsplit('.', 1)[0]
-            mgr_parsl_v = msg['parsl_v']
+            ix_minor_py = self.current_platform['python_version'].rsplit('.', 1)[0]
+            ix_parsl_v = self.current_platform['parsl_version']
+            mgr_python_v = msg.get('python_version') or msg['python_v']
+            mgr_minor_py = mgr_python_v.rsplit('.', 1)[0]
+            mgr_parsl_v = msg.get('parsl_version') or msg['parsl_v']
 
             new_rec = ManagerRecord(
                 block_id=None,
@@ -396,13 +398,13 @@ class Interchange:
                 last_heartbeat=time.time(),
                 idle_since=time.time(),
                 parsl_version=mgr_parsl_v,
-                python_version=msg['python_v'],
+                python_version=mgr_python_v,
             )
 
             # m is a ManagerRecord, but meta is a dict[Any,Any] and so can
             # contain arbitrary fields beyond those in ManagerRecord (and
-            # indeed does - for example, python_v) which are then ignored
-            # later.
+            # indeed does - for example, uid and cpu_count, which are used
+            # by monitoring).
             new_rec.update(msg)
 
             logger.info(f'Registration info for manager {manager_id!r}: {msg}')

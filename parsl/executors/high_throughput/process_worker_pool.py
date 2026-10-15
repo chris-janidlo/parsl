@@ -258,12 +258,8 @@ class Manager:
         """
         return {
             'type': 'registration',
-            'parsl_v': PARSL_VERSION,
-            'python_v': "{}.{}.{}".format(
-                sys.version_info.major,
-                sys.version_info.minor,
-                sys.version_info.micro
-            ),
+            'parsl_version': PARSL_VERSION,
+            'python_version': platform.python_version(),
             'packages': {d.metadata['Name']: d.version for d in distributions()},
             'worker_count': self.worker_count,
             'uid': self.uid,
@@ -276,6 +272,9 @@ class Manager:
             'dir': os.getcwd(),
             'cpu_count': psutil.cpu_count(logical=False),
             'total_memory': psutil.virtual_memory().total,
+            # legacy handling for older interchanges (remove ca Apr 27)
+            'parsl_v': PARSL_VERSION,
+            'python_v': platform.python_version(),
         }
 
     @staticmethod
